@@ -311,3 +311,14 @@ img { max-width: 100%; }
   .v-orb, .v-grad, .v-total, .v-dot, .v-marquee-track { animation: none !important; }
   .v-marquee { opacity: 1; animation: none; }
 }
+
+/* Aperçu intégré (page admin) */
+.a-preview { border: 1px solid var(--border); border-radius: 14px; background: var(--card); overflow: hidden; }
+.a-preview-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.a-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.a-seg button { padding: 6px 12px; border: 0; background: var(--bg); font-size: 12px; font-weight: 600; color: var(--fg2); }
+.a-seg button.on { background: var(--primary); color: #fff; }
+.a-preview-stage { background: var(--bg2); padding: 14px; display: flex; justify-content: center; }
+.a-preview-frame { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); height: 68vh; min-height: 420px; transition: width 0.3s var(--ease); }
+.a-preview-frame.desktop { width: 100%; }
+.a-preview-frame.mobile { width: 390px; max-width: 100%; }

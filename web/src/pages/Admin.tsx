@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { apiRequest, VitrineConfig } from '../lib/api';
+import { apiRequest, BASE, VitrineConfig } from '../lib/api';
+import { usePanelTheme } from '../lib/panelTheme';
 
 const EMPTY: VitrineConfig = {
   tagline: '',
@@ -49,12 +50,16 @@ export default function Admin() {
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const theme = params.get('theme') === 'light' ? 'light' : 'dark';
+  const lang = params.get('lang') === 'en' ? 'en' : 'fr';
+  const [preview, setPreview] = useState<'off' | 'desktop' | 'mobile'>('off');
+  usePanelTheme(theme);
   const [cfg, setCfg] = useState<VitrineConfig>(EMPTY);
   const [cats, setCats] = useState<{ key: string; name: string }[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveCount, setSaveCount] = useState(0);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -77,6 +82,7 @@ export default function Admin() {
       const r = await apiRequest<{ config: VitrineConfig }>('PUT', 'config', token, { config: cfg });
       setCfg({ ...EMPTY, ...r.config });
       setSaved(true);
+      setSaveCount((n) => n + 1);
     } catch (e: any) {
       setError(String(e.message));
     } finally {
@@ -99,10 +105,24 @@ export default function Admin() {
           <p className="a-muted">Page d’accueil publique affichée sur <code>/</code> aux visiteurs non connectés. Les champs vides utilisent le texte par défaut (français / anglais selon le visiteur).</p>
         </div>
         <div className="a-head-actions">
-          <a className="a-btn" href={`${import.meta.env.BASE_URL}`} target="_blank" rel="noopener noreferrer">Aperçu ↗</a>
+          <button type="button" className="a-btn" onClick={() => setPreview(preview === 'off' ? 'desktop' : 'off')}>{preview === 'off' ? 'Aperçu' : 'Fermer l’aperçu'}</button>
           <button className="a-btn primary" onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</button>
         </div>
       </div>
+      {preview !== 'off' && (
+        <div className="a-preview">
+          <div className="a-preview-bar">
+            <span className="a-muted">Aperçu de la page publique (enregistrez pour voir vos modifications)</span>
+            <div className="a-seg">
+              <button type="button" className={preview === 'desktop' ? 'on' : ''} onClick={() => setPreview('desktop')}>Ordinateur</button>
+              <button type="button" className={preview === 'mobile' ? 'on' : ''} onClick={() => setPreview('mobile')}>Mobile</button>
+            </div>
+          </div>
+          <div className="a-preview-stage">
+            <iframe title="Aperçu de la vitrine" className={`a-preview-frame ${preview}`} src={`${BASE}?theme=${theme}&lang=${lang}&_=${saveCount}`} />
+          </div>
+        </div>
+      )}
       {saved && <div className="a-ok">Enregistré. La vitrine est mise à jour (cache de 30 secondes). Page publique : {publicUrl}</div>}
       {error && <div className="a-alert">{error}</div>}
 
