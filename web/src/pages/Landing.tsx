@@ -29,19 +29,98 @@ function detectTheme(param: string | null): 'light' | 'dark' {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-/** Applique les couleurs du thème personnalisé du panel (relayées par l'API de l'addon). */
+/** Variables du thème du panel (format « H S% L% ») → variables de la vitrine. */
+const THEME_MAP: Record<string, string> = {
+  background: '--bg', foreground: '--fg', card: '--card', muted: '--bg2', 'muted-foreground': '--fg2', border: '--border', primary: '--primary', destructive: '--red',
+};
+
+function hsl(raw: string): string | null {
+  const p = raw.trim().split(/\s+/);
+  return p.length === 3 ? `hsl(${p[0]}, ${p[1]}, ${p[2]})` : null;
+}
+
+/** Applique le thème personnalisé du panel (Paramètres → Thème) : fond, texte, cartes, bordures et couleur principale. */
 function usePanelTheme(mode: 'light' | 'dark') {
   useEffect(() => {
+    const root = document.documentElement.style;
+    // Repart de la palette par défaut quand le mode change (sinon les variables du mode précédent restent).
+    Object.values(THEME_MAP).forEach((v) => root.removeProperty(v));
+    root.removeProperty('--primary-2');
     fetch(`${BASE}api/theme`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { themeColors: { light: Record<string, string>; dark: Record<string, string> } | null } | null) => {
         const colors = d?.themeColors?.[mode];
-        if (!colors?.primary) return;
-        const parts = colors.primary.trim().split(/\s+/);
-        if (parts.length === 3) document.documentElement.style.setProperty('--primary', `hsl(${parts[0]}, ${parts[1]}, ${parts[2]})`);
+        if (!colors) return;
+        for (const [k, v] of Object.entries(THEME_MAP)) {
+          const val = colors[k] ? hsl(colors[k]) : null;
+          if (val) root.setProperty(v, val);
+        }
+        // Seconde teinte du dégradé : la couleur principale décalée de 22° de teinte.
+        const pr = colors.primary?.trim().split(/\s+/);
+        if (pr?.length === 3) root.setProperty('--primary-2', `hsl(${(parseFloat(pr[0]) + 22) % 360}, ${pr[1]}, ${pr[2]})`);
       })
       .catch(() => undefined);
   }, [mode]);
+}
+
+/** Animations : apparition au défilement (data-reveal) + halo qui suit la souris sur les cartes. */
+function useEffects(rootRef: React.RefObject<HTMLElement>) {
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const seen = new WeakSet<Element>();
+    const io = 'IntersectionObserver' in window
+      ? new IntersectionObserver((entries) => {
+          for (const e of entries) if (e.isIntersecting) { (e.target as HTMLElement).classList.add('in'); io!.unobserve(e.target); }
+        }, { threshold: 0.12, rootMargin: '0px 0px -6% 0px' })
+      : null;
+    const scan = () => {
+      root.querySelectorAll('[data-reveal]').forEach((el) => {
+        if (seen.has(el)) return;
+        seen.add(el);
+        if (reduce || !io) el.classList.add('in');
+        else io.observe(el);
+      });
+    };
+    scan();
+    const mo = new MutationObserver(scan);
+    mo.observe(root, { childList: true, subtree: true });
+    const move = (e: MouseEvent) => {
+      const card = (e.target as HTMLElement | null)?.closest?.('.v-card') as HTMLElement | null;
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', `${e.clientX - r.left}px`);
+      card.style.setProperty('--my', `${e.clientY - r.top}px`);
+    };
+    root.addEventListener('mousemove', move, { passive: true });
+    return () => { io?.disconnect(); mo.disconnect(); root.removeEventListener('mousemove', move); };
+  }, [rootRef]);
+}
+
+/** Compteur animé (0 → n) déclenché à l'affichage. */
+function CountUp({ value, lang }: { value: number; lang: Lang }) {
+  const ref = useRef<HTMLElement>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setN(value); return; }
+    let raf = 0;
+    const run = () => {
+      const t0 = performance.now();
+      const tick = (t: number) => {
+        const p = Math.min(1, (t - t0) / 1400);
+        setN(Math.round(value * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    };
+    const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) { run(); io.disconnect(); } }, { threshold: 0.4 });
+    io.observe(el);
+    return () => { io.disconnect(); cancelAnimationFrame(raf); };
+  }, [value]);
+  return <b ref={ref}>{fmtNumber(n, lang)}</b>;
 }
 
 export default function Landing() {
@@ -86,6 +165,8 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
   const hasGeo = data.geo && data.totals.countries > 0;
   const [menu, setMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffects(rootRef);
 
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 8);
@@ -118,7 +199,7 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
   const logo = data.site.external ?? `${BASE}api/logo`;
 
   return (
-    <div className="v-root">
+    <div className="v-root" ref={rootRef}>
       <header className={`v-header ${scrolled ? 'scrolled' : ''}`}>
         <div className="v-wrap v-header-in">
           <a className="v-brand" href="#top" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
@@ -131,16 +212,16 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
           <div className="v-actions">
             <button className="v-icon-btn" onClick={() => setLang(lang === 'fr' ? 'en' : 'fr')} aria-label={t('ui.lang')} title={t('ui.lang')}>{lang.toUpperCase()}</button>
             <button className="v-icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={t('ui.theme')} title={t('ui.theme')}>{theme === 'dark' ? '☀️' : '🌙'}</button>
-            <a className="v-btn ghost v-hide-sm" href={LOGIN} target="_top">{t('nav.login')}</a>
-            {data.site.registration && <a className="v-btn primary v-hide-sm" href={REGISTER} target="_top">{t('nav.register')}</a>}
+            <a className="v-btn ghost v-hide-sm" href={LOGIN} target="_top" rel="noreferrer">{t('nav.login')}</a>
+            {data.site.registration && <a className="v-btn primary v-hide-sm" href={REGISTER} target="_top" rel="noreferrer">{t('nav.register')}</a>}
             <button className="v-icon-btn v-burger" onClick={() => setMenu((v) => !v)} aria-label={t('ui.menu')} aria-expanded={menu}>☰</button>
           </div>
         </div>
         {menu && (
           <div className="v-mobile-menu">
             {nav.map(([id, label]) => <a key={id} href={`#${id}`} onClick={(e) => { e.preventDefault(); go(id); }}>{label}</a>)}
-            <a href={LOGIN} target="_top">{t('nav.login')}</a>
-            {data.site.registration && <a href={REGISTER} target="_top">{t('nav.register')}</a>}
+            <a href={LOGIN} target="_top" rel="noreferrer">{t('nav.login')}</a>
+            {data.site.registration && <a href={REGISTER} target="_top" rel="noreferrer">{t('nav.register')}</a>}
           </div>
         )}
       </header>
@@ -156,7 +237,7 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
               <Head title={t('features.title')} sub={t('features.sub')} />
               <div className="v-grid v-grid-3">
                 {features.map((f, i) => (
-                  <div key={i} className="v-card v-feature">
+                  <div key={i} className="v-card v-feature" data-reveal>
                     <div className="v-ico">{f.icon || ['🛡️', '⚡', '📈', '🌍', '🚀', '💬'][i % 6]}</div>
                     <h3>{f.title}</h3>
                     <p>{f.text}</p>
@@ -172,7 +253,7 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
               <Head title={t('steps.title')} sub={t('steps.sub')} />
               <ol className="v-steps">
                 {steps.map((st, i) => (
-                  <li key={i} className="v-card"><span className="v-step-n">{i + 1}</span><h3>{st.title}</h3><p>{st.text}</p></li>
+                  <li key={i} className="v-card" data-reveal><span className="v-step-n">{i + 1}</span><h3>{st.title}</h3><p>{st.text}</p></li>
                 ))}
               </ol>
             </div>
@@ -184,7 +265,7 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
               <Head title={t('faq.title')} />
               <div className="v-faq">
                 {faq.map((f, i) => (
-                  <details key={i} className="v-card v-faq-item">
+                  <details key={i} className="v-card v-faq-item" data-reveal>
                     <summary>{f.q}</summary>
                     <p>{f.a}</p>
                   </details>
@@ -195,12 +276,12 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
         )}
         <section className="v-section">
           <div className="v-wrap">
-            <div className="v-final">
+            <div className="v-final" data-reveal>
               <h2>{t('final.title')}</h2>
               <p>{t('final.sub')}</p>
               <div className="v-cta">
-                <a className="v-btn primary lg" href={data.site.registration ? REGISTER : LOGIN} target="_top">{data.site.registration ? t('nav.register') : t('nav.login')}</a>
-                {data.site.registration && <a className="v-btn lg" href={LOGIN} target="_top">{t('nav.login')}</a>}
+                <a className="v-btn primary lg" href={data.site.registration ? REGISTER : LOGIN} target="_top" rel="noreferrer">{data.site.registration ? t('nav.register') : t('nav.login')}</a>
+                {data.site.registration && <a className="v-btn lg" href={LOGIN} target="_top" rel="noreferrer">{t('nav.login')}</a>}
               </div>
             </div>
           </div>
@@ -220,13 +301,13 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
             <h4>{t('footer.platform')}</h4>
             <ul>
               {nav.map(([id, label]) => <li key={id}><a href={`#${id}`} onClick={(e) => { e.preventDefault(); go(id); }}>{label}</a></li>)}
-              <li><a href={LOGIN} target="_top">{t('nav.login')}</a></li>
-              {data.site.registration && <li><a href={REGISTER} target="_top">{t('nav.register')}</a></li>}
+              <li><a href={LOGIN} target="_top" rel="noreferrer">{t('nav.login')}</a></li>
+              {data.site.registration && <li><a href={REGISTER} target="_top" rel="noreferrer">{t('nav.register')}</a></li>}
             </ul>
           </div>
           <div>
             <h4>{t('footer.resources')}</h4>
-            <ul><li><a href={STATUS} target="_top">{t('nav.status')}</a></li></ul>
+            <ul><li><a href={STATUS} target="_top" rel="noreferrer">{t('nav.status')}</a></li></ul>
           </div>
           {s.contact && (cfg.contact.discord || cfg.contact.telegram || cfg.contact.email || cfg.contact.website) && (
             <div>
@@ -251,7 +332,7 @@ function Page({ data, lang, setLang, theme, setTheme, t }: { data: PublicData; l
 
 function Head({ title, sub }: { title: string; sub?: string }) {
   return (
-    <div className="v-head">
+    <div className="v-head" data-reveal>
       <h2>{title}</h2>
       {sub && <p>{sub}</p>}
     </div>
@@ -267,20 +348,26 @@ function Hero({ data, t, lang, showPricing }: { data: PublicData; t: TFn; lang: 
     data.totals.products > 0 && { n: data.totals.products, l: t('stats.products') },
     data.totals.proxies > 0 && { n: data.totals.proxies, l: t('stats.proxies') },
   ].filter(Boolean) as { n: number; l: string }[];
+  const flags = [...new Set(data.categories.flatMap((cat) => cat.countries.map((x) => x.code)))].slice(0, 28);
   return (
     <section className="v-hero">
-      <div className="v-hero-bg" aria-hidden="true" />
+      <div className="v-hero-bg" aria-hidden="true"><i className="v-orb o1" /><i className="v-orb o2" /><i className="v-orb o3" /><i className="v-gridbg" /></div>
       <div className="v-wrap v-hero-in">
-        <span className="v-badge"><i className="v-dot" />{h.badge || t('hero.badge')}</span>
-        <h1>{h.title || t('hero.title')} <span className="v-grad">{h.highlight || t('hero.highlight')}</span></h1>
-        <p className="v-lead">{h.subtitle || t('hero.subtitle')}</p>
-        <div className="v-cta">
-          <a className="v-btn primary lg" href={data.site.registration ? REGISTER : LOGIN} target="_top">{h.cta_primary || t('cta.primary')}</a>
+        <span className="v-badge v-in" style={{ ['--i' as any]: 0 }}><i className="v-dot" />{h.badge || t('hero.badge')}</span>
+        <h1 className="v-in" style={{ ['--i' as any]: 1 }}>{h.title || t('hero.title')} <span className="v-grad">{h.highlight || t('hero.highlight')}</span></h1>
+        <p className="v-lead v-in" style={{ ['--i' as any]: 2 }}>{h.subtitle || t('hero.subtitle')}</p>
+        <div className="v-cta v-in" style={{ ['--i' as any]: 3 }}>
+          <a className="v-btn primary lg" href={data.site.registration ? REGISTER : LOGIN} target="_top" rel="noreferrer">{h.cta_primary || t('cta.primary')}</a>
           {showPricing && <a className="v-btn lg" href="#pricing" onClick={(e) => { e.preventDefault(); document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }); }}>{h.cta_secondary || t('cta.secondary')}</a>}
         </div>
+        {flags.length > 0 && (
+          <div className="v-marquee" aria-hidden="true">
+            <div className="v-marquee-track">{[...flags, ...flags].map((code, i) => <span key={i} className="v-mq"><Flag code={code} /></span>)}</div>
+          </div>
+        )}
         {c.sections.stats && stats.length > 0 && (
           <div className="v-stats">
-            {stats.map((s) => <div key={s.l} className="v-stat"><b>{fmtNumber(s.n, lang)}</b><span>{s.l}</span></div>)}
+            {stats.map((s) => <div key={s.l} className="v-stat" data-reveal><CountUp value={s.n} lang={lang} /><span>{s.l}</span></div>)}
           </div>
         )}
       </div>
@@ -357,7 +444,7 @@ function ProductCard({ p, data, t, lang }: { p: Product; data: PublicData; t: TF
   const specs = specList(p, t, lang);
   const low = p.stock !== null && p.stock > 0 && p.stock <= 5;
   return (
-    <article className="v-card v-product">
+    <article className="v-card v-product" data-reveal>
       <div className="v-product-top">
         <h3>{p.name}</h3>
         {low && <span className="v-pill warn">{t('stock.low', { n: p.stock! })}</span>}
@@ -374,7 +461,7 @@ function ProductCard({ p, data, t, lang }: { p: Product; data: PublicData; t: TF
         <div className="v-muted v-range">{p.per_gb.max_gb > 0 ? t('price.range', { min: p.per_gb.min_gb, max: p.per_gb.max_gb }) : t('price.rangeMin', { min: p.per_gb.min_gb })}</div>
       )}
       <ul className="v-specs">{specs.map((s) => <li key={s}><i>✓</i>{s}</li>)}</ul>
-      <a className="v-btn primary block" href={data.site.registration ? REGISTER : LOGIN} target="_top">{t('buy.login')}</a>
+      <a className="v-btn primary block" href={data.site.registration ? REGISTER : LOGIN} target="_top" rel="noreferrer">{t('buy.login')}</a>
       <small className="v-muted v-center-t">{t('buy.hint')}</small>
     </article>
   );
@@ -418,7 +505,7 @@ function Coverage({ data, t, lang }: { data: PublicData; t: TFn; lang: Lang }) {
         {list.length === 0 ? (
           <div className="v-empty"><span>{t('coverage.none')}</span></div>
         ) : (
-          <ul className="v-countries">
+          <ul className="v-countries" data-reveal>
             {list.map((c) => (
               <li key={c.code} className="v-country">
                 <Flag code={c.code} />
@@ -486,7 +573,7 @@ function Calculator({ data, t, lang }: { data: PublicData; t: TFn; lang: Lang })
     <section id="calculator" className="v-section alt">
       <div className="v-wrap">
         <Head title={t('calc.title')} sub={t('calc.sub')} />
-        <div className="v-calc">
+        <div className="v-calc" data-reveal>
           <div className="v-card v-calc-form">
             {cats.length > 1 && (
               <label>
@@ -542,7 +629,7 @@ function Calculator({ data, t, lang }: { data: PublicData; t: TFn; lang: Lang })
             {data.config.show_prices && effGb > 0 && <div className="v-muted">{t('calc.perGb', { v: fmtMoney(effGb, product.currency, lang) })}</div>}
             {!perGb && includedGb > 0 && <div className="v-pill">{t('calc.included', { v: fmtBytes(includedGb * 1e9 * qty, lang) })}</div>}
             {pages > 0 && <div className="v-muted v-pages">{t('calc.pages', { n: fmtNumber(pages, lang) })}</div>}
-            <a className="v-btn primary block" href={data.site.registration ? REGISTER : LOGIN} target="_top">{t('calc.cta')}</a>
+            <a className="v-btn primary block" href={data.site.registration ? REGISTER : LOGIN} target="_top" rel="noreferrer">{t('calc.cta')}</a>
           </div>
         </div>
       </div>
