@@ -66,7 +66,7 @@ img { max-width: 100%; }
 .v-header { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: saturate(180%) blur(14px); border-bottom: 1px solid transparent; transition: border-color 0.2s, box-shadow 0.2s; }
 .v-header.scrolled { border-bottom-color: var(--border); box-shadow: 0 6px 24px -18px rgba(0, 0, 0, 0.4); }
 .v-header-in { display: flex; align-items: center; gap: 24px; height: 68px; }
-.v-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; }
+.v-brand { white-space: nowrap; display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; }
 .v-logo { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; }
 .v-nav { display: flex; gap: 4px; margin-left: 8px; flex: 1; }
 .v-nav a { padding: 8px 12px; border-radius: 10px; font-weight: 500; font-size: 15px; color: var(--fg2); transition: color 0.15s, background 0.15s; }

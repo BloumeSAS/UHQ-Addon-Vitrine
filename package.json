@@ -1,6 +1,6 @@
 {
   "name": "uhq-addon-vitrine",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Addon Vitrine pour UHQ Panel OS — page d'accueil publique (catalogue, pays, simulateur de prix) — NestJS + React",
   "private": true,
   "scripts": {
