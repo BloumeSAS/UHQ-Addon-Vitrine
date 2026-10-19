@@ -1,0 +1,42 @@
+{
+  "name": "Vitrine",
+  "version": "1.0.0",
+  "description": "Page d'accueil publique pour les visiteurs non connectés : logo et nom du site, catalogue par catégorie (addon Orders), pays disponibles, simulateur de prix, avantages, FAQ.",
+  "icon": "Store",
+  "author": {
+    "name": "Bloume SAS",
+    "email": "contact@bloume.fr",
+    "url": "https://bloume.fr"
+  },
+  "homepage": "https://github.com/BloumeSAS/UHQ-Addon-Vitrine",
+  "license": "MIT",
+  "repository": "https://github.com/BloumeSAS/UHQ-Addon-Vitrine",
+  "translations": {
+    "fr": {
+      "addon.vitrine.admin": "Vitrine"
+    },
+    "en": {
+      "addon.vitrine.admin": "Showcase"
+    }
+  },
+  "pages": [
+    {
+      "path": "/admin",
+      "label": "addon.vitrine.admin",
+      "icon": "Store",
+      "showInNavbar": true,
+      "adminOnly": true
+    }
+  ],
+  "slots": [],
+  "widgets": [],
+  "auth": {
+    "passJwt": true,
+    "passUserInfo": true
+  },
+  "backup": {
+    "exportEndpoint": "/api/backup/export",
+    "importEndpoint": "/api/backup/import",
+    "authHeader": "X-Panel-Key"
+  }
+}

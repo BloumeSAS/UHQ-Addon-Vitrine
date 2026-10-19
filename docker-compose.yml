@@ -1,0 +1,30 @@
+# ─── Développement local ──────────────────────────────────────────────────────
+# Pour le hot-reload, préférer :
+#   cd api && npm run start:dev  (NestJS :3106)
+#   cd web && npm run dev        (Vite :5176)
+
+services:
+  vitrine:
+    build: .
+    container_name: uhq-addon-vitrine
+    restart: unless-stopped
+    ports:
+      - "3106:3106"
+    environment:
+      PORT:          3106
+      PANEL_URL:     http://host.docker.internal:8000
+      ORDERS_URL:    http://host.docker.internal:3102
+      DB_PATH:       /app/data/vitrine-data.json
+      NODE_ENV:      production
+      # PANEL_API_KEY: votre-clé-api-maître-du-panel
+    volumes:
+      - vitrine_data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3106/uhq-manifest.json"]
+      interval: 30s
+      timeout:  5s
+      retries:  3
+
+volumes:
+  vitrine_data:
+    driver: local

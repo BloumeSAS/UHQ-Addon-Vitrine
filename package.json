@@ -1,0 +1,14 @@
+{
+  "name": "uhq-addon-vitrine",
+  "version": "1.0.0",
+  "description": "Addon Vitrine pour UHQ Panel OS — page d'accueil publique (catalogue, pays, simulateur de prix) — NestJS + React",
+  "private": true,
+  "scripts": {
+    "install:all": "npm i --prefix api && npm i --prefix web",
+    "build": "npm run build --prefix web && npm run build --prefix api",
+    "start": "npm run start --prefix api",
+    "dev:api": "npm run start:dev --prefix api",
+    "dev:web": "npm run dev --prefix web",
+    "version": "node bump-version.js && git add api/package.json web/package.json uhq-manifest.json"
+  }
+}
